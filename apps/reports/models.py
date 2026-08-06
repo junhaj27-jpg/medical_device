@@ -1,0 +1,4 @@
+from django.conf import settings
+from django.db import models
+class RegulatoryReport(models.Model):
+    adverse_event=models.ForeignKey("adverse_events.AdverseEvent",on_delete=models.CASCADE,related_name="reports"); report_number=models.CharField(max_length=40,unique=True); regulatory_authority=models.CharField(max_length=100); report_type=models.CharField(max_length=50); report_status=models.CharField(max_length=30,default="DRAFT"); submitted_at=models.DateTimeField(null=True,blank=True); submitted_by=models.ForeignKey(settings.AUTH_USER_MODEL,on_delete=models.SET_NULL,null=True,blank=True); report_content=models.TextField(blank=True); document_file=models.FileField(upload_to="reports/",blank=True); created_at=models.DateTimeField(auto_now_add=True); updated_at=models.DateTimeField(auto_now=True)
