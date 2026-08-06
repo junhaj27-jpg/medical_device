@@ -74,3 +74,15 @@ Docker 구성은 PostgreSQL 16을 사용합니다. 운영에서는 `.env`의 강
 ## 향후 개선
 
 운영 전에는 객체별 Django Permission 정교화, 동시 번호 발급용 PostgreSQL sequence, 악성 파일 검사, 감사 로그 보존/서명 정책, 규제기관별 제출 어댑터, 비동기 알림과 다국어 DOCX 템플릿을 우선 권장합니다.
+
+## CAPA와 규제 보고서
+
+CAPA는 문제 확인 → 근본 원인 → 시정·예방조치 → 실행 → 검토 → 효과성 평가 → 종료 순서로 관리합니다. 실제 완료일과 진행률 100%가 있어야 완료할 수 있고, 효과성 평가 후 ADMIN이 종료합니다. `INEFFECTIVE` 결과에는 재조치 경고가 표시됩니다. 자세한 흐름은 [capa_workflow.md](docs/capa_workflow.md)를 참고하세요.
+
+규제 보고서는 이상사례 선택 시 제품, LOT, 익명 환자, 조사와 CAPA 내용을 자동 반영합니다. RA_QA가 검토 요청하고 ADMIN이 승인한 뒤 DOCX를 생성하고 제출 완료 처리합니다. 파일은 `media/reports/RPT-연도-순번_v버전.docx`에 버전별로 저장됩니다. 흐름은 [report_workflow.md](docs/report_workflow.md)에 정리했습니다.
+
+STAFF는 관련 기록 조회만 가능하고, RA_QA는 CAPA·보고서 작성과 검토 요청 및 승인된 보고서 제출, ADMIN은 CAPA 종료·재개와 보고서 승인을 담당합니다. 화면 버튼뿐 아니라 View와 서비스 계층에서도 권한을 검증합니다.
+
+샘플 데이터는 `python manage.py seed_demo_data`로 CAPA 8건과 보고서 8건을 멱등 생성합니다. 테스트는 `pytest`로 실행합니다. 본 시스템의 분류·경고·자동 반영 결과는 참고용이며 실제 의료기기 규제 판단은 담당자가 수행해야 합니다.
+
+Windows에서 설치가 끝난 뒤에는 `powershell -ExecutionPolicy Bypass -File .\scripts\run_local.ps1`로 로컬 SQLite 설정의 개발 서버를 실행할 수 있습니다. 스크립트는 Django 검사와 마이그레이션을 수행한 뒤 `127.0.0.1:8000` 서버를 전경에서 유지합니다.
