@@ -1,0 +1,18 @@
+services:
+  web:
+    build: .
+    command: sh -c "python manage.py migrate && python manage.py seed_demo_data && python manage.py runserver 0.0.0.0:8000"
+    ports: ["8000:8000"]
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      SECRET_KEY: docker-development-key-change-me
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      POSTGRES_DB: mdsafe
+      POSTGRES_USER: mdsafe
+      POSTGRES_PASSWORD: mdsafe
+    depends_on: [db]
+  db:
+    image: postgres:16-alpine
+    environment: {POSTGRES_DB: mdsafe, POSTGRES_USER: mdsafe, POSTGRES_PASSWORD: mdsafe}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+volumes: {postgres_data: {}}
