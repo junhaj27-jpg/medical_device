@@ -1,6 +1,8 @@
-from django.core.exceptions import PermissionDenied,ValidationError
-from apps.audit.models import AuditLog
+from django.core.exceptions import PermissionDenied, ValidationError
+
 from apps.approvals.models import Approval
+from apps.audit.models import AuditLog
+
 FLOW={"RECEIVED":"UNDER_REVIEW","UNDER_REVIEW":"INVESTIGATING","INVESTIGATING":"CAPA_IN_PROGRESS","CAPA_IN_PROGRESS":"APPROVAL_PENDING","APPROVAL_PENDING":"REPORTING","REPORTING":"CLOSED"}
 def transition_event(event,new_status,user,comment=""):
     if new_status not in {FLOW.get(event.status),"ON_HOLD","REJECTED"}: raise ValidationError("허용되지 않는 상태 전환입니다.")

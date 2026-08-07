@@ -1,17 +1,24 @@
 from datetime import timedelta
+
 import pytest
-from django.core.exceptions import PermissionDenied,ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.urls import reverse
 from django.utils import timezone
+
 from apps.accounts.models import User
-from apps.devices.models import MedicalDevice,DeviceLot
-from apps.adverse_events.models import AdverseEvent,PatientAnonymousInfo
-from apps.investigations.models import Investigation
-from apps.capa.models import CAPA
-from apps.capa.services import create_capa,change_capa_status,close_capa,reopen_capa
-from apps.reports.models import RegulatoryReport
-from apps.reports.services import create_report_from_event,approve_report,generate_docx_report,mark_report_submitted,populate_report_fields
+from apps.adverse_events.models import AdverseEvent, PatientAnonymousInfo
 from apps.audit.models import AuditLog
+from apps.capa.services import change_capa_status, close_capa, create_capa, reopen_capa
+from apps.devices.models import DeviceLot, MedicalDevice
+from apps.investigations.models import Investigation
+from apps.reports.services import (
+    approve_report,
+    create_report_from_event,
+    generate_docx_report,
+    mark_report_submitted,
+    populate_report_fields,
+)
+
 pytestmark=pytest.mark.django_db
 
 @pytest.fixture
@@ -23,7 +30,7 @@ def data():
     PatientAnonymousInfo.objects.create(adverse_event=e,anonymous_code="P1",age_group="adult",gender="unknown")
     return admin,ra,staff,e
 def add_investigation(e,ra): return Investigation.objects.create(adverse_event=e,investigator=ra,investigation_summary="Summary",root_cause="Cause",investigation_method="Test",started_at=timezone.now())
-def capa_kwargs(e,ra): return dict(adverse_event=e,capa_type="CORRECTIVE_PREVENTIVE",issue_description="Issue",root_cause="Cause",corrective_action="Fix",preventive_action="Prevent",action_plan="Plan",owner=ra,planned_start_date=timezone.localdate(),planned_completion_date=timezone.localdate()+timedelta(days=10),completion_percentage=0)
+def capa_kwargs(e,ra): return {"adverse_event":e,"capa_type":"CORRECTIVE_PREVENTIVE","issue_description":"Issue","root_cause":"Cause","corrective_action":"Fix","preventive_action":"Prevent","action_plan":"Plan","owner":ra,"planned_start_date":timezone.localdate(),"planned_completion_date":timezone.localdate()+timedelta(days=10),"completion_percentage":0}
 def test_capa_number(data): admin,ra,staff,e=data; add_investigation(e,ra); assert create_capa(ra,**capa_kwargs(e,ra)).capa_number.startswith("CAPA-")
 def test_capa_unique(data): admin,ra,staff,e=data; add_investigation(e,ra); a=create_capa(ra,**capa_kwargs(e,ra)); b=create_capa(ra,**capa_kwargs(e,ra)); assert a.capa_number!=b.capa_number
 def test_staff_cannot_create(data): admin,ra,staff,e=data; add_investigation(e,ra); pytest.raises(PermissionDenied,create_capa,staff,**capa_kwargs(e,ra))

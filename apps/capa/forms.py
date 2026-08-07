@@ -1,5 +1,7 @@
 from django import forms
+
 from .models import CAPA
+
 
 class CAPAForm(forms.ModelForm):
     class Meta:

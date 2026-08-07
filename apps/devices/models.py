@@ -1,4 +1,6 @@
 from django.db import models
+
+
 class MedicalDevice(models.Model):
     device_code=models.CharField(max_length=40,unique=True); product_name=models.CharField(max_length=150); model_name=models.CharField(max_length=100); manufacturer=models.CharField(max_length=150); product_category=models.CharField(max_length=100); approval_number=models.CharField(max_length=80); risk_class=models.CharField(max_length=20); manufacturing_status=models.CharField(max_length=30,default="ACTIVE"); created_at=models.DateTimeField(auto_now_add=True); updated_at=models.DateTimeField(auto_now=True)
     def __str__(self): return f"{self.product_name} ({self.model_name})"

@@ -1,5 +1,8 @@
 from django import forms
-from .models import AdverseEvent,PatientAnonymousInfo,Attachment
+
+from .models import AdverseEvent
+
+
 class AdverseEventForm(forms.ModelForm):
     anonymous_code=forms.CharField(max_length=50); anonymous_history=forms.CharField(widget=forms.Textarea,required=False); patient_outcome=forms.CharField(widget=forms.Textarea,required=False)
     class Meta:

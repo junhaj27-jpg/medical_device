@@ -55,13 +55,9 @@ Docker 구성은 PostgreSQL 16을 사용합니다. 운영에서는 `.env`의 강
 
 ## 데모 계정
 
-| 사용자 | 비밀번호 | 역할 |
-|---|---|---|
-| admin | Admin1234! | ADMIN |
-| rauser | Rauser1234! | RA_QA |
-| staff | Staff1234! | STAFF |
-
-이 계정은 테스트 전용입니다. 운영 배포 전 반드시 삭제하거나 비밀번호를 변경하세요.
+데모 계정을 만들려면 `.env`에 `DEMO_ADMIN_PASSWORD`, `DEMO_RA_PASSWORD`,
+`DEMO_STAFF_PASSWORD`를 직접 설정한 후 `python manage.py seed_demo_data`를 실행하세요.
+값이 없으면 명령은 계정을 만들지 않고 중단됩니다. 기존 계정의 비밀번호는 재실행해도 변경되지 않습니다.
 
 ## 폴더 구조
 
