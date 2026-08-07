@@ -59,6 +59,41 @@ Docker 구성은 PostgreSQL 16을 사용합니다. 운영에서는 `.env`의 강
 `DEMO_STAFF_PASSWORD`를 직접 설정한 후 `python manage.py seed_demo_data`를 실행하세요.
 값이 없으면 명령은 계정을 만들지 않고 중단됩니다. 기존 계정의 비밀번호는 재실행해도 변경되지 않습니다.
 
+## 비밀번호 관리 및 보안
+
+로그인한 사용자는 화면 우측 상단의 **비밀번호 변경** 메뉴에서 자신의 비밀번호를 변경할 수 있습니다.
+
+- 변경 화면: `/accounts/password/change/`
+- 완료 화면: `/accounts/password/change/done/`
+- 현재 비밀번호 확인 후 새 비밀번호와 확인값 입력
+- 변경 완료 후 현재 로그인 세션 유지
+- CSRF 보호 적용
+- 감사 로그에는 `비밀번호 변경 완료` 이벤트만 기록하며 비밀번호 값은 저장하지 않음
+
+비밀번호는 최소 10자이며 영문 대문자, 영문 소문자, 숫자, 특수문자를 각각 1개 이상 포함해야 합니다.
+사용자명이나 개인정보와 지나치게 유사한 값 및 Django가 관리하는 흔한 비밀번호 목록의 값은 거부됩니다.
+검증 오류는 비밀번호 변경 화면에 한국어로 표시됩니다.
+
+운영 설정(`config.settings.production`)에서는 다음 환경변수가 모두 필요합니다. 누락된 값이 있으면
+서버 시작이 중단되며, 실제 값은 `.env` 또는 배포 환경의 비밀 저장소에서 관리해야 합니다.
+
+```env
+SECRET_KEY=
+ALLOWED_HOSTS=
+POSTGRES_DB=
+POSTGRES_USER=
+POSTGRES_PASSWORD=
+POSTGRES_HOST=
+POSTGRES_PORT=5432
+```
+
+Docker Compose 역시 `SECRET_KEY`, `POSTGRES_PASSWORD`와 세 가지 데모 계정 비밀번호를 외부
+환경변수로 전달받습니다. 실제 `.env` 파일은 `.gitignore`에 포함되어 있으며 Git에 커밋하면 안 됩니다.
+
+비밀번호 보안 회귀 테스트는 비로그인 접근 차단, 현재 비밀번호 오류, 약한 비밀번호, 확인값 불일치,
+정상 변경 후 신규·기존 비밀번호 인증, 세션 유지, 시드 재실행 시 기존 비밀번호 보존 및 공개 문서의
+평문 자격 증명 제거를 검증합니다.
+
 ## 폴더 구조
 
 `config/settings`는 local/production 설정을, `apps`는 accounts, devices, adverse_events, investigations, capa, approvals, reports, audit, dashboard, ai_assistant 업무 경계를 담습니다. `templates`, `static`, `media`, `tests`, `docs`는 각각 UI, 자산, 업로드, 자동화 테스트, Mermaid 문서를 담습니다.
