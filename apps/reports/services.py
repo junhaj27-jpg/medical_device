@@ -1,11 +1,14 @@
 from pathlib import Path
+
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+
 from apps.audit.models import AuditLog
+
 from .models import RegulatoryReport
 
 

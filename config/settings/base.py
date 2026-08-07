@@ -1,10 +1,11 @@
-from pathlib import Path
 import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(BASE_DIR / ".env")
-SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-development-key-change-me")
+SECRET_KEY = os.getenv("SECRET_KEY", "")
 DEBUG = False
 ALLOWED_HOSTS = [h for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h]
 INSTALLED_APPS = [
@@ -34,3 +35,9 @@ REST_FRAMEWORK = {"DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema", 
 SPECTACULAR_SETTINGS = {"TITLE": "의료기기 이상사례 API", "VERSION": "1.0.0"}
 AI_ASSISTANT_ENABLED = os.getenv("AI_ASSISTANT_ENABLED", "false").lower() == "true"
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "apps.accounts.validators.KoreanUserAttributeSimilarityValidator"},
+    {"NAME": "apps.accounts.validators.KoreanMinimumLengthValidator", "OPTIONS": {"min_length": 10}},
+    {"NAME": "apps.accounts.validators.KoreanCommonPasswordValidator"},
+    {"NAME": "apps.accounts.validators.PasswordComplexityValidator"},
+]

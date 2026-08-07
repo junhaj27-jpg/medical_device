@@ -1,21 +1,39 @@
+import os
 from datetime import timedelta
-from django.core.management.base import BaseCommand
+
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
+
 from apps.accounts.models import User
-from apps.devices.models import MedicalDevice,DeviceLot
-from apps.adverse_events.models import AdverseEvent,PatientAnonymousInfo
-from apps.investigations.models import Investigation
-from apps.capa.models import CAPA
+from apps.adverse_events.models import AdverseEvent, PatientAnonymousInfo
 from apps.approvals.models import Approval
+from apps.capa.models import CAPA
+from apps.devices.models import DeviceLot, MedicalDevice
+from apps.investigations.models import Investigation
 from apps.reports.models import RegulatoryReport
 from apps.reports.services import populate_report_fields
+
 
 class Command(BaseCommand):
     help="포트폴리오 데모 데이터를 멱등하게 생성합니다."
     def handle(self,*args,**opts):
         users={}; today=timezone.localdate()
-        for name,password,role in [("admin","Admin1234!","ADMIN"),("rauser","Rauser1234!","RA_QA"),("staff","Staff1234!","STAFF")]:
-            u,_=User.objects.get_or_create(username=name,defaults={"role":role,"email":f"{name}@example.test"}); u.role=role; u.is_staff=role=="ADMIN"; u.is_superuser=role=="ADMIN"; u.set_password(password); u.save(); users[name]=u
+        demo_accounts = [
+            ("admin", "DEMO_ADMIN_PASSWORD", "ADMIN"),
+            ("rauser", "DEMO_RA_PASSWORD", "RA_QA"),
+            ("staff", "DEMO_STAFF_PASSWORD", "STAFF"),
+        ]
+        missing = [env_name for _, env_name, _ in demo_accounts if not os.getenv(env_name)]
+        if missing:
+            raise CommandError(
+                "데모 계정 생성에 필요한 환경변수가 없습니다: " + ", ".join(missing)
+            )
+        for name,env_name,role in demo_accounts:
+            u,created=User.objects.get_or_create(username=name,defaults={"role":role,"email":f"{name}@example.test"})
+            u.role=role; u.is_staff=role=="ADMIN"; u.is_superuser=role=="ADMIN"
+            if created:
+                u.set_password(os.environ[env_name])
+            u.save(); users[name]=u
         devices=[]; lots=[]
         for i in range(5):
             d,_=MedicalDevice.objects.get_or_create(device_code=f"MD-{i+1:03d}",defaults={"product_name":f"환자감시장치 {i+1}","model_name":f"PM-{100+i}","manufacturer":"MDSafe Medical","product_category":"모니터링","approval_number":f"허가-2026-{i+1:03d}","risk_class":"2등급"}); devices.append(d)

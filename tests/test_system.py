@@ -1,19 +1,20 @@
 from datetime import timedelta
-from io import BytesIO
+
 import pytest
-from django.core.exceptions import PermissionDenied,ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
+
 from apps.accounts.models import User
-from apps.devices.models import MedicalDevice,DeviceLot
-from apps.adverse_events.models import AdverseEvent,validate_attachment
+from apps.adverse_events.models import AdverseEvent, validate_attachment
 from apps.adverse_events.services import transition_event
+from apps.approvals.models import Approval
 from apps.audit.models import AuditLog
 from apps.capa.models import CAPA
-from apps.investigations.models import Investigation
-from apps.approvals.models import Approval
+from apps.devices.models import DeviceLot, MedicalDevice
 from apps.reports.services import generate_event_report
+
 pytestmark=pytest.mark.django_db
 @pytest.fixture
 def users(): return {r:User.objects.create_user(r.lower(),password="Pass1234!",role=r) for r in ("ADMIN","RA_QA","STAFF")}

@@ -1,15 +1,20 @@
-import csv,json
-from django.contrib.auth.decorators import login_required,user_passes_test
+import csv
+import json
+
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Count
-from django.http import HttpResponse,HttpResponseForbidden
-from django.shortcuts import get_object_or_404,redirect,render
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+
 from apps.adverse_events.forms import AdverseEventForm
-from apps.adverse_events.models import AdverseEvent,PatientAnonymousInfo
+from apps.adverse_events.models import AdverseEvent, PatientAnonymousInfo
 from apps.audit.models import AuditLog
 from apps.capa.models import CAPA
 from apps.devices.models import MedicalDevice
 from apps.reports.models import RegulatoryReport
+
+
 def scoped(user): return AdverseEvent.objects.filter(reporter=user) if user.role=="STAFF" else AdverseEvent.objects.all()
 @login_required
 def dashboard(request):

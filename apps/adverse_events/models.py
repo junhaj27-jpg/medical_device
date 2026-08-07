@@ -1,8 +1,11 @@
 from pathlib import Path
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import models,transaction
+from django.db import models, transaction
 from django.utils import timezone
+
+
 def validate_attachment(value):
     if Path(value.name).suffix.lower().lstrip(".") not in {"pdf","docx","xlsx","csv","png","jpg","jpeg"}: raise ValidationError("허용되지 않는 파일 형식입니다.")
     if value.size>20*1024*1024: raise ValidationError("파일은 20MB 이하여야 합니다.")

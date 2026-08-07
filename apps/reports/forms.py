@@ -1,5 +1,8 @@
 from django import forms
+
 from .models import RegulatoryReport
+
+
 class ReportForm(forms.ModelForm):
     class Meta:
         model=RegulatoryReport

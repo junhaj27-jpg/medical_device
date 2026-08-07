@@ -1,14 +1,27 @@
 import csv
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied,ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.http import FileResponse,HttpResponse
-from django.shortcuts import get_object_or_404,redirect,render
+from django.http import FileResponse, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+
 from apps.adverse_events.models import AdverseEvent
+
 from .forms import ReportForm
 from .models import RegulatoryReport
-from .services import create_report_from_event,populate_report_fields,request_report_review,approve_report,generate_docx_report,mark_report_submitted,_audit
+from .services import (
+    _audit,
+    approve_report,
+    create_report_from_event,
+    generate_docx_report,
+    mark_report_submitted,
+    populate_report_fields,
+    request_report_review,
+)
+
+
 def _qs(user):
     qs=RegulatoryReport.objects.select_related("adverse_event","created_by","approved_by")
     return qs.filter(adverse_event__reporter=user) if user.role=="STAFF" else qs
