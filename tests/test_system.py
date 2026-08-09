@@ -13,7 +13,7 @@ from apps.approvals.models import Approval
 from apps.audit.models import AuditLog
 from apps.capa.models import CAPA
 from apps.devices.models import DeviceLot, MedicalDevice
-from apps.reports.services import generate_event_report
+from apps.reports.services import approve_report, create_report_from_event, generate_docx_report, request_report_review
 
 pytestmark=pytest.mark.django_db
 @pytest.fixture
@@ -47,14 +47,14 @@ def test_close_requires_approval(event,users):
     event.status="REPORTING"; event.save()
     with pytest.raises(ValidationError): transition_event(event,"CLOSED",users["ADMIN"])
 def test_close_admin(event,users):
-    event.status="REPORTING"; event.save(); Approval.objects.create(adverse_event=event,requested_by=users["RA_QA"],approver=users["ADMIN"],decision="APPROVED"); transition_event(event,"CLOSED",users["ADMIN"]); assert event.status=="CLOSED"
+    event.status="REPORTING"; event.save(); Approval.objects.create(adverse_event=event,requested_by=users["RA_QA"],approver=users["ADMIN"],decision="APPROVED"); transition_event(event,"CLOSED",users["ADMIN"],comment="종료 조건 충족"); assert event.status=="CLOSED"
 def test_capa_number(event,users):
     c=CAPA.objects.create(adverse_event=event,capa_type="BOTH",issue_description="i",corrective_action="c",preventive_action="p",owner=users["RA_QA"],planned_completion_date=timezone.localdate()); assert c.capa_number.startswith("CAPA-")
 def test_capa_update(event,users):
     c=CAPA.objects.create(adverse_event=event,capa_type="BOTH",issue_description="i",corrective_action="c",preventive_action="p",owner=users["RA_QA"],planned_completion_date=timezone.localdate()); c.status="COMPLETED"; c.save(); assert CAPA.objects.get(pk=c.pk).status=="COMPLETED"
 def test_bad_extension():
     with pytest.raises(ValidationError): validate_attachment(SimpleUploadedFile("x.exe",b"x"))
-def test_good_extension(): validate_attachment(SimpleUploadedFile("x.pdf",b"x"))
+def test_good_extension(): validate_attachment(SimpleUploadedFile("x.pdf",b"%PDF-1.7\n",content_type="application/pdf"))
 def test_large_file():
     f=SimpleUploadedFile("x.pdf",b"x"); f.size=20*1024*1024+1
     with pytest.raises(ValidationError): validate_attachment(f)
@@ -62,4 +62,5 @@ def test_audit_created(event,users): transition_event(event,"UNDER_REVIEW",users
 def test_api_auth(client): assert client.get("/api/events/").status_code in (401,403)
 def test_api_staff_scope(client,event,users): client.force_login(users["STAFF"]); assert client.get("/api/events/").json()[0]["id"]==event.id
 def test_csv(client,event,users): client.force_login(users["RA_QA"]); assert client.get(reverse("event_list")+"?format=csv").status_code==200
-def test_docx(event,users,tmp_path,settings): settings.MEDIA_ROOT=tmp_path; p=generate_event_report(event,users["RA_QA"]); assert p.exists() and p.suffix==".docx"
+def test_docx(event,users,tmp_path,settings):
+    settings.MEDIA_ROOT=tmp_path; r=create_report_from_event(event,users["RA_QA"],regulatory_authority="내부",report_type="INTERNAL"); request_report_review(r,users["RA_QA"]); approve_report(r,users["ADMIN"],password="Pass1234!",reason="검토 완료"); p=generate_docx_report(r,users["RA_QA"]); assert p.exists() and p.suffix==".docx"

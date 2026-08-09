@@ -19,12 +19,13 @@ from .services import (
     mark_report_submitted,
     populate_report_fields,
     request_report_review,
+    update_report,
+    visible_reports,
 )
 
 
 def _qs(user):
-    qs=RegulatoryReport.objects.select_related("adverse_event","created_by","approved_by")
-    return qs.filter(adverse_event__reporter=user) if user.role=="STAFF" else qs
+    return visible_reports(user).select_related("adverse_event","created_by","approved_by")
 @login_required
 def report_list(request):
     qs=_qs(request.user).order_by("-created_at"); q=request.GET.get("q","")
@@ -49,7 +50,7 @@ def report_create(request):
 def report_edit(request,pk):
     if request.user.role not in {"RA_QA","ADMIN"}: raise PermissionDenied
     report=get_object_or_404(_qs(request.user),pk=pk); form=ReportForm(request.POST or None,instance=report)
-    if request.method=="POST" and form.is_valid(): form.save(); _audit(request.user,"REPORT_UPDATE",report,request=request); return redirect("reports:detail",pk=pk)
+    if request.method=="POST" and form.is_valid(): update_report(report,request.user,**form.cleaned_data); return redirect("reports:detail",pk=pk)
     return render(request,"reports/form.html",{"form":form,"mode":"수정","report":report})
 @login_required
 def report_detail(request,pk): return render(request,"reports/detail.html",{"report":get_object_or_404(_qs(request.user),pk=pk)})
@@ -59,7 +60,7 @@ def report_action(request,pk,action):
     report=get_object_or_404(_qs(request.user),pk=pk)
     try:
         if action=="review":request_report_review(report,request.user)
-        elif action=="approve":approve_report(report,request.user)
+        elif action=="approve":approve_report(report,request.user,password=request.POST.get("password"),reason=request.POST.get("reason",""),request=request)
         elif action=="generate":generate_docx_report(report,request.user,request)
         elif action=="submit":mark_report_submitted(report,request.user,request)
     except (ValidationError,PermissionDenied) as e: messages.error(request,str(e))

@@ -1,10 +1,25 @@
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.utils import timezone
 
-from apps.audit.models import AuditLog
+from apps.approvals.models import ElectronicSignature
+from apps.approvals.services import revoke_active_signatures
+from apps.audit.services import record_audit, snapshot
 
 from .models import CAPA
+
+CAPA_STATUS_TRANSITIONS = {
+    CAPA.Status.DRAFT: {CAPA.Status.IN_PROGRESS, CAPA.Status.CANCELLED},
+    CAPA.Status.IN_PROGRESS: {CAPA.Status.REVIEW_PENDING, CAPA.Status.CANCELLED},
+    CAPA.Status.REVIEW_PENDING: {CAPA.Status.COMPLETED, CAPA.Status.CANCELLED},
+    CAPA.Status.COMPLETED: {CAPA.Status.CLOSED},
+    CAPA.Status.CLOSED: set(),
+    CAPA.Status.CANCELLED: set(),
+}
+
+
+def visible_capas(user):
+    qs = CAPA.objects.all()
+    return qs.filter(adverse_event__reporter=user) if user.role == "STAFF" else qs
 
 
 def _allowed(user):
@@ -12,12 +27,12 @@ def _allowed(user):
 
 
 def _audit(user, action, capa, before=None, request=None):
-    AuditLog.objects.create(user=user, action=action, model_name="CAPA", object_id=str(capa.pk), object_repr=capa.capa_number, before_data=before or {}, after_data={"status": capa.status, "progress": capa.completion_percentage}, ip_address=request.META.get("REMOTE_ADDR") if request else None)
+    record_audit(user=user,action=action,target=capa,before=before or {},after=snapshot(capa),request=request)
 
 
 def generate_capa_number():
-    year=timezone.localdate().year; last=CAPA.objects.filter(capa_number__startswith=f"CAPA-{year}-").order_by("capa_number").last()
-    return f"CAPA-{year}-{(int(last.capa_number[-6:])+1 if last else 1):06d}"
+    from apps.compliance.services import next_management_number
+    return next_management_number("CAPA")
 
 
 def _validate(capa):
@@ -35,9 +50,12 @@ def create_capa(user, **data):
 
 @transaction.atomic
 def update_capa(capa, user, **data):
-    _allowed(user); before={"status":capa.status,"progress":capa.completion_percentage}
+    _allowed(user); before=snapshot(capa)
+    if "status" in data: raise ValidationError("CAPA 상태는 상태 변경 서비스를 통해서만 변경할 수 있습니다.")
     for key,value in data.items(): setattr(capa,key,value)
-    _validate(capa); capa.save(); _audit(user,"CAPA_UPDATE",capa,before); return capa
+    _validate(capa)
+    if ElectronicSignature.objects.filter(target_model="CAPA",target_id=str(capa.pk),revocation__isnull=True).exists(): capa.approval_status=CAPA.ApprovalStatus.NEEDS_REAPPROVAL; capa.approval_version+=1
+    revoke_active_signatures(capa,user=user,reason="서명 후 CAPA 중요 데이터 변경"); capa.save(); _audit(user,"CAPA_UPDATE",capa,before); return capa
 
 
 def validate_capa_completion(capa):
@@ -47,7 +65,9 @@ def validate_capa_completion(capa):
 
 def change_capa_status(capa, new_status, user, request=None):
     _allowed(user); before={"status":capa.status}
-    if capa.status==CAPA.Status.CLOSED and new_status!=CAPA.Status.IN_PROGRESS: raise ValidationError("종료 CAPA는 다시 열기만 가능합니다.")
+    if new_status not in CAPA.Status.values: raise ValidationError("알 수 없는 CAPA 상태입니다.")
+    if new_status not in CAPA_STATUS_TRANSITIONS[capa.status]:
+        raise ValidationError(f"CAPA 상태를 {capa.status}에서 {new_status}(으)로 변경할 수 없습니다.")
     if new_status==CAPA.Status.COMPLETED: validate_capa_completion(capa)
     if new_status==CAPA.Status.CLOSED and (not capa.effectiveness_review or capa.effectiveness_result==CAPA.Effectiveness.NOT_REVIEWED): raise ValidationError("효과성 평가 후 종료할 수 있습니다.")
     capa.status=new_status; capa.save(update_fields=["status","updated_at"]); _audit(user,"CAPA_STATUS",capa,before,request); return capa
@@ -56,5 +76,7 @@ def change_capa_status(capa, new_status, user, request=None):
 def close_capa(capa,user,request=None): return change_capa_status(capa,CAPA.Status.CLOSED,user,request)
 def reopen_capa(capa,user,request=None):
     if user.role!="ADMIN": raise PermissionDenied("ADMIN만 CAPA를 다시 열 수 있습니다.")
-    return change_capa_status(capa,CAPA.Status.IN_PROGRESS,user,request)
+    if capa.status != CAPA.Status.CLOSED: raise ValidationError("종료된 CAPA만 다시 열 수 있습니다.")
+    before={"status":capa.status}; capa.status=CAPA.Status.IN_PROGRESS
+    capa.save(update_fields=["status","updated_at"]); _audit(user,"CAPA_REOPEN",capa,before,request); return capa
 def calculate_capa_overdue_status(capa): return capa.is_overdue

@@ -1,7 +1,9 @@
 from .base import *
 
-required = ["SECRET_KEY", "ALLOWED_HOSTS", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST"]
+required = ["SECRET_KEY", "ALLOWED_HOSTS", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_HOST", "SIGNATURE_HMAC_KEY"]
 missing = [name for name in required if not os.getenv(name)]
+if not os.getenv("AUDIT_HMAC_KEY") and not (os.getenv("AUDIT_HMAC_KEYS") and os.getenv("AUDIT_ACTIVE_KEY_ID")):
+    missing.append("AUDIT_HMAC_KEY or AUDIT_HMAC_KEYS + AUDIT_ACTIVE_KEY_ID")
 if missing:
     raise RuntimeError(f"운영 환경 필수 환경변수가 없습니다: {', '.join(missing)}")
 

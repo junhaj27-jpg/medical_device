@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.adverse_events.models import AdverseEvent
-from apps.audit.models import AuditLog
+from apps.audit.services import record_audit
 
 
 class Command(BaseCommand):
@@ -11,5 +11,5 @@ class Command(BaseCommand):
         qs=AdverseEvent.objects.filter(due_date__lt=timezone.localdate()).exclude(status="CLOSED")
         for event in qs:
             if not event.is_overdue: event.is_overdue=True; event.save(update_fields=["is_overdue"])
-            AuditLog.objects.create(action="OVERDUE_CHECK",model_name="AdverseEvent",object_id=str(event.pk),object_repr=event.event_number,after_data={"due_date":str(event.due_date)})
+            record_audit(user=None,action="OVERDUE_CHECK",target=event,after={"due_date":str(event.due_date)},reason="자동 기한 점검")
         self.stdout.write(self.style.SUCCESS(f"기한 초과 {qs.count()}건 확인"))

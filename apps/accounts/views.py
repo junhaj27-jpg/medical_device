@@ -2,7 +2,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.views import PasswordChangeDoneView, PasswordChangeView
 from django.urls import reverse_lazy
 
-from apps.audit.models import AuditLog
+from apps.audit.services import record_audit
 
 
 class SecurePasswordChangeView(PasswordChangeView):
@@ -12,14 +12,11 @@ class SecurePasswordChangeView(PasswordChangeView):
     def form_valid(self, form):
         response = super().form_valid(form)
         update_session_auth_hash(self.request, form.user)
-        AuditLog.objects.create(
-            user=self.request.user,
+        record_audit(
+            user=self.request.user, target=self.request.user,
             action="PASSWORD_CHANGED",
-            model_name="accounts.User",
-            object_id=str(self.request.user.pk),
-            object_repr=self.request.user.get_username(),
-            after_data={"event": "비밀번호 변경 완료"},
-            ip_address=self.request.META.get("REMOTE_ADDR"),
+            after={"event": "비밀번호 변경 완료"},
+            reason="사용자 비밀번호 변경", request=self.request,
         )
         return response
 

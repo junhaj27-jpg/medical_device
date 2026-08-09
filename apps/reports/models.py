@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.db import models, transaction
+from django.db import models
 from django.utils import timezone
 
 
@@ -44,10 +44,9 @@ class RegulatoryReport(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.report_number:
-            year = timezone.localdate().year
-            with transaction.atomic():
-                last = RegulatoryReport.objects.select_for_update().filter(report_number__startswith=f"RPT-{year}-").order_by("report_number").last()
-                self.report_number = f"RPT-{year}-{(int(last.report_number[-6:]) + 1 if last else 1):06d}"
+            from apps.compliance.services import next_management_number
+
+            self.report_number = next_management_number("REGULATORY_REPORT")
         super().save(*args, **kwargs)
 
     @property

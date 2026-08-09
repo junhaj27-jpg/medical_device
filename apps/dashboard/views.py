@@ -10,9 +10,10 @@ from django.utils import timezone
 from apps.adverse_events.forms import AdverseEventForm
 from apps.adverse_events.models import AdverseEvent, PatientAnonymousInfo
 from apps.audit.models import AuditLog
-from apps.capa.models import CAPA
-from apps.devices.models import MedicalDevice
-from apps.reports.models import RegulatoryReport
+from apps.audit.services import record_audit
+from apps.capa.services import visible_capas
+from apps.devices.services import visible_devices
+from apps.reports.services import visible_reports
 
 
 def scoped(user): return AdverseEvent.objects.filter(reporter=user) if user.role=="STAFF" else AdverseEvent.objects.all()
@@ -20,7 +21,7 @@ def scoped(user): return AdverseEvent.objects.filter(reporter=user) if user.role
 def dashboard(request):
     qs=scoped(request.user); today=timezone.localdate(); stats={"total":qs.count(),"received":qs.filter(status="RECEIVED").count(),"investigating":qs.filter(status="INVESTIGATING").count(),"capa":qs.filter(status="CAPA_IN_PROGRESS").count(),"approval":qs.filter(status="APPROVAL_PENDING").count(),"soon":qs.filter(due_date__gte=today,due_date__lte=today+timezone.timedelta(days=7)).count(),"overdue":qs.filter(due_date__lt=today).exclude(status="CLOSED").count(),"closed":qs.filter(status="CLOSED").count()}
     severity=list(qs.values("severity").annotate(count=Count("id"))); status=list(qs.values("status").annotate(count=Count("id")))
-    capas=CAPA.objects.all(); reports=RegulatoryReport.objects.all()
+    capas=visible_capas(request.user); reports=visible_reports(request.user)
     stats.update({"capa_active":capas.filter(status="IN_PROGRESS").count(),"capa_overdue":sum(c.is_overdue for c in capas),"capa_review":capas.filter(status="REVIEW_PENDING").count(),"effect_pending":capas.filter(status="COMPLETED",effectiveness_result="NOT_REVIEWED").count(),"report_draft":reports.filter(report_status="DRAFT").count(),"report_review":reports.filter(report_status="REVIEW_PENDING").count(),"report_soon":reports.filter(submission_due_date__gte=today,submission_due_date__lte=today+timezone.timedelta(days=7)).exclude(report_status="SUBMITTED").count(),"report_overdue":sum(r.is_overdue for r in reports)})
     return render(request,"dashboard.html",{"stats":stats,"recent":qs.select_related("medical_device").order_by("-created_at")[:8],"severity_json":json.dumps(severity),"status_json":json.dumps(status),"capa_status_json":json.dumps(list(capas.values("status").annotate(count=Count("id")))),"report_status_json":json.dumps(list(reports.values("report_status").annotate(count=Count("id")))),"urgent_capas":[c for c in capas.order_by("planned_completion_date") if c.is_overdue][:5],"urgent_reports":[r for r in reports.order_by("submission_due_date") if r.is_overdue][:5]})
 @login_required
@@ -37,7 +38,7 @@ def event_list(request):
 def event_create(request):
     form=AdverseEventForm(request.POST or None)
     if request.method=="POST" and form.is_valid():
-        event=form.save(commit=False); event.reporter=request.user; event.status="RECEIVED"; event.save(); PatientAnonymousInfo.objects.create(adverse_event=event,anonymous_code=form.cleaned_data["anonymous_code"],age_group=event.patient_age_group,gender=event.patient_gender,relevant_history=form.cleaned_data["anonymous_history"],outcome=form.cleaned_data["patient_outcome"]); AuditLog.objects.create(user=request.user,action="CREATE",model_name="AdverseEvent",object_id=str(event.pk),object_repr=event.event_number,after_data={"event_number":event.event_number,"title":event.title}); return redirect("event_detail",pk=event.pk)
+        event=form.save(commit=False); event.reporter=request.user; event.status="RECEIVED"; event.save(); PatientAnonymousInfo.objects.create(adverse_event=event,anonymous_code=form.cleaned_data["anonymous_code"],age_group=event.patient_age_group,gender=event.patient_gender,relevant_history=form.cleaned_data["anonymous_history"],outcome=form.cleaned_data["patient_outcome"]); record_audit(user=request.user,action="CREATE",target=event,after={"event_number":event.event_number,"title":event.title},reason="이상사례 접수",request=request); return redirect("event_detail",pk=event.pk)
     return render(request,"events/form.html",{"form":form})
 @login_required
 def event_detail(request,pk):
@@ -45,8 +46,8 @@ def event_detail(request,pk):
 @login_required
 def report_download(request,pk): return redirect("reports:create")
 @login_required
-def devices(request): return render(request,"devices.html",{"devices":MedicalDevice.objects.prefetch_related("lots")})
+def devices(request): return render(request,"devices.html",{"devices":visible_devices(request.user)})
 @login_required
-def capas(request): return render(request,"capas.html",{"capas":CAPA.objects.select_related("adverse_event","owner")})
+def capas(request): return render(request,"capas.html",{"capas":visible_capas(request.user).select_related("adverse_event","owner")})
 @user_passes_test(lambda u:u.is_authenticated and u.role=="ADMIN")
 def audits(request): return render(request,"audits.html",{"logs":AuditLog.objects.select_related("user")[:200]})

@@ -1,10 +1,11 @@
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models, transaction
+from django.db import models
 from django.utils import timezone
 
 
 class CAPA(models.Model):
+    class ApprovalStatus(models.TextChoices): DRAFT="DRAFT","초안"; REVIEW_PENDING="REVIEW_PENDING","검토 대기"; APPROVED="APPROVED","승인"; REJECTED="REJECTED","반려"; NEEDS_REAPPROVAL="NEEDS_REAPPROVAL","재승인 필요"
     class Type(models.TextChoices):
         CORRECTIVE = "CORRECTIVE", "시정조치"
         PREVENTIVE = "PREVENTIVE", "예방조치"
@@ -43,15 +44,15 @@ class CAPA(models.Model):
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.DRAFT)
     completion_percentage = models.PositiveSmallIntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, related_name="created_capas")
+    approval_status=models.CharField(max_length=30,choices=ApprovalStatus.choices,default=ApprovalStatus.DRAFT); approval_version=models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
         if not self.capa_number:
-            year = timezone.localdate().year
-            with transaction.atomic():
-                last = CAPA.objects.select_for_update().filter(capa_number__startswith=f"CAPA-{year}-").order_by("capa_number").last()
-                self.capa_number = f"CAPA-{year}-{(int(last.capa_number[-6:]) + 1 if last else 1):06d}"
+            from apps.compliance.services import next_management_number
+
+            self.capa_number = next_management_number("CAPA")
         super().save(*args, **kwargs)
 
     @property

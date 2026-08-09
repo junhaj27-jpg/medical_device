@@ -7,14 +7,15 @@ from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
+from apps.approvals.services import approve_capa, reject_signature_target, request_signature_review
+
 from .forms import CAPAForm
 from .models import CAPA
-from .services import change_capa_status, create_capa, reopen_capa, update_capa
+from .services import change_capa_status, create_capa, reopen_capa, update_capa, visible_capas
 
 
 def _qs(user):
-    qs=CAPA.objects.select_related("adverse_event","owner","reviewer","created_by")
-    return qs.filter(adverse_event__reporter=user) if user.role=="STAFF" else qs
+    return visible_capas(user).select_related("adverse_event","owner","reviewer","created_by")
 @login_required
 def capa_list(request):
     qs=_qs(request.user).order_by("-created_at"); q=request.GET.get("q","")
@@ -50,4 +51,17 @@ def capa_status(request,pk):
         else: change_capa_status(capa,request.POST["status"],request.user,request)
         messages.success(request,"상태가 변경되었습니다.")
     except (ValidationError,PermissionDenied) as e: messages.error(request,str(e))
+    return redirect("capa:detail",pk=pk)
+
+@login_required
+def capa_approval(request,pk,action):
+    if request.method!="POST": raise PermissionDenied
+    capa=get_object_or_404(_qs(request.user),pk=pk)
+    try:
+        if action=="review": request_signature_review(capa,user=request.user,request=request)
+        elif action=="approve": approve_capa(capa,user=request.user,password=request.POST.get("password"),reason=request.POST.get("reason",""),request=request)
+        elif action=="reject": reject_signature_target(capa,user=request.user,password=request.POST.get("password"),reason=request.POST.get("reason",""),request=request)
+        else: raise ValidationError("알 수 없는 승인 작업입니다.")
+        messages.success(request,"전자서명 승인 작업이 처리되었습니다.")
+    except (ValidationError,PermissionDenied) as exc: messages.error(request,str(exc))
     return redirect("capa:detail",pk=pk)

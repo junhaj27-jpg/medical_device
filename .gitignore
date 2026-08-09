@@ -7,3 +7,4 @@ media/*
 !media/.gitkeep
 staticfiles/
 .pytest_cache/
+server.*.log
