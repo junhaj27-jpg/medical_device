@@ -38,7 +38,14 @@ from apps.compliance.retention_services import (
 from apps.compliance.services import next_management_number
 from apps.devices.models import DeviceLot, MedicalDevice
 from apps.investigations.models import Investigation
-from apps.reports.services import approve_report, create_report_from_event, request_report_review, update_report
+from apps.reports.services import (
+    approve_report,
+    create_report_from_event,
+    generate_docx_report,
+    mark_report_submitted,
+    request_report_review,
+    update_report,
+)
 
 pytestmark=pytest.mark.django_db
 
@@ -110,9 +117,10 @@ def test_audit_outbox_max_failure_preserves_original(security_data,settings):
         def export(self,**kwargs): raise RuntimeError("offline")
     outbox=process_one_outbox(FailedExporter()); assert outbox.status=="FAILED" and AuditLog.objects.filter(pk=log.pk).exists()
 
-def test_signature_reauthentication_reason_self_approval_and_invalidation(security_data):
+def test_signature_reauthentication_reason_self_approval_and_invalidation(security_data,tmp_path,settings):
     admin,ra,staff,event=security_data
-    report=create_report_from_event(event,ra,regulatory_authority="MFDS"); request_report_review(report,ra)
+    settings.MEDIA_ROOT=tmp_path
+    report=create_report_from_event(event,ra,regulatory_authority="MFDS"); request_report_review(report,ra); generate_docx_report(report,ra)
     with pytest.raises(ValidationError): approve_report(report,admin,password="wrong",reason="검토")
     with pytest.raises(ValidationError): approve_report(report,admin,password="Pass1234!",reason="")
     report.created_by=admin; report.save(update_fields=["created_by"])
@@ -126,6 +134,25 @@ def test_signature_reauthentication_reason_self_approval_and_invalidation(securi
     update_report(report,ra,title="변경된 보고서")
     signature.refresh_from_db(); report.refresh_from_db()
     assert not verify_signature(signature) and report.report_status=="DRAFT"
+
+
+def test_submitted_report_is_immutable(security_data,tmp_path,settings):
+    admin,ra,staff,event=security_data; settings.MEDIA_ROOT=tmp_path
+    report=create_report_from_event(event,ra,regulatory_authority="MFDS")
+    request_report_review(report,ra); generate_docx_report(report,ra)
+    approve_report(report,admin,password="Pass1234!",reason="내용 확인")
+    mark_report_submitted(report,ra)
+    with pytest.raises(ValidationError): update_report(report,ra,title="제출 후 변경")
+
+
+def test_generated_version_is_covered_by_approval_signature(security_data,tmp_path,settings):
+    admin,ra,staff,event=security_data; settings.MEDIA_ROOT=tmp_path
+    report=create_report_from_event(event,ra,regulatory_authority="MFDS")
+    request_report_review(report,ra); generate_docx_report(report,ra)
+    approve_report(report,admin,password="Pass1234!",reason="생성 문서 확인")
+    signature=ElectronicSignature.objects.get(target_model="RegulatoryReport",target_id=str(report.pk))
+    assert signature.target_version==report.document_version==1
+    assert signature.canonical_data["document_version"]==1
 
 def test_file_content_quarantine_scan_and_download_controls(security_data,tmp_path):
     admin,ra,staff,event=security_data
@@ -218,3 +245,4 @@ def test_zip_bomb_ratio_is_rejected(settings):
         archive.writestr("[Content_Types].xml","x"); archive.writestr("word/document.xml","A"*10000)
     upload=SimpleUploadedFile("bomb.docx",stream.getvalue(),content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     with pytest.raises(ValidationError): validate_file_content(upload)
+
