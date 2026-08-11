@@ -15,7 +15,7 @@ from .models import RegulatoryReport
 REPORT_STATUS_TRANSITIONS = {
     RegulatoryReport.Status.DRAFT: {RegulatoryReport.Status.REVIEW_PENDING},
     RegulatoryReport.Status.REVIEW_PENDING: {
-        RegulatoryReport.Status.APPROVED,
+        RegulatoryReport.Status.GENERATED,
         RegulatoryReport.Status.REJECTED,
     },
     RegulatoryReport.Status.REJECTED: {RegulatoryReport.Status.REVIEW_PENDING},
@@ -24,8 +24,8 @@ REPORT_STATUS_TRANSITIONS = {
         RegulatoryReport.Status.SUBMITTED,
     },
     RegulatoryReport.Status.GENERATED: {
-        RegulatoryReport.Status.GENERATED,
-        RegulatoryReport.Status.SUBMITTED,
+        RegulatoryReport.Status.APPROVED,
+        RegulatoryReport.Status.REJECTED,
     },
     RegulatoryReport.Status.SUBMITTED: set(),
 }
@@ -56,6 +56,7 @@ def generate_report_number():
 
 @transaction.atomic
 def reject_report(report,user,password=None,reason="",request=None):
+    locked=RegulatoryReport.objects.select_for_update().get(pk=report.pk); report.__dict__.update(locked.__dict__)
     if user.role!="ADMIN": raise PermissionDenied("ADMIN만 보고서를 반려할 수 있습니다.")
     _validate_status_transition(report,RegulatoryReport.Status.REJECTED)
     sign_approval(target=report,user=user,password=password,meaning="규제보고서 반려",reason=reason,request=request,forbid_self_user_id=report.created_by_id)
@@ -74,7 +75,7 @@ def populate_report_fields(event):
     return {"title":f"{event.event_number} 규제 보고서","event_summary":f"{event.title}\n{event.description}","device_information":f"제품: {event.medical_device.product_name}\n모델: {event.medical_device.model_name}\n허가번호: {event.medical_device.approval_number}\nLOT: {event.device_lot.lot_number}\n시리얼: {event.device_lot.serial_number or '미입력'}","patient_information":f"익명코드: {patient.anonymous_code}\n연령군: {patient.age_group}\n성별: {patient.gender}" if patient else "미입력","investigation_summary":investigation.investigation_summary if investigation else "","root_cause_summary":investigation.root_cause if investigation else "","capa_summary":"\n".join(f"{c.capa_number}: {c.corrective_action} / {c.preventive_action}" for c in event.capas.all())}
 def validate_report_generation(report):
     if not report.adverse_event.medical_device_id: raise ValidationError("제품 정보가 필요합니다.")
-    if report.report_status not in {RegulatoryReport.Status.APPROVED,RegulatoryReport.Status.GENERATED}: raise ValidationError("승인된 보고서만 DOCX를 생성할 수 있습니다.")
+    if report.report_status!=RegulatoryReport.Status.REVIEW_PENDING: raise ValidationError("검토 대기 보고서만 승인용 DOCX를 생성할 수 있습니다.")
 @transaction.atomic
 def create_report_from_event(event,user,**overrides):
     _allowed(user); data=populate_report_fields(event); data.update(overrides); report=RegulatoryReport.objects.create(adverse_event=event,created_by=user,**data); _audit(user,"REPORT_CREATE",report); return report
@@ -83,6 +84,7 @@ def request_report_review(report,user):
     report.report_status=RegulatoryReport.Status.REVIEW_PENDING; report.reviewed_by=user; report.save(); _audit(user,"REPORT_REVIEW_REQUEST",report); return report
 @transaction.atomic
 def approve_report(report,user,password=None,reason="",request=None):
+    locked=RegulatoryReport.objects.select_for_update().get(pk=report.pk); report.__dict__.update(locked.__dict__)
     if user.role!="ADMIN": raise PermissionDenied("ADMIN만 승인할 수 있습니다.")
     _validate_status_transition(report,RegulatoryReport.Status.APPROVED)
     sign_approval(target=report,user=user,password=password,meaning="규제보고서 승인",reason=reason,request=request,forbid_self_user_id=report.created_by_id)
@@ -92,6 +94,8 @@ def approve_report(report,user,password=None,reason="",request=None):
 @transaction.atomic
 def update_report(report,user,**data):
     _allowed(user); before=snapshot(report)
+    if report.report_status==RegulatoryReport.Status.SUBMITTED:
+        raise ValidationError("제출 완료된 보고서는 수정할 수 없습니다. 후속 보고서를 생성하세요.")
     for key,value in data.items(): setattr(report,key,value)
     revoke_active_signatures(report,user=user,reason="승인된 중요 데이터 변경으로 재승인 필요")
     if report.report_status in {RegulatoryReport.Status.APPROVED,RegulatoryReport.Status.GENERATED}:
@@ -113,3 +117,4 @@ def mark_report_submitted(report,user,request=None):
     _validate_status_transition(report,RegulatoryReport.Status.SUBMITTED)
     report.report_status=RegulatoryReport.Status.SUBMITTED; report.submitted_at=timezone.now(); report.submitted_by=user; report.save(); _audit(user,"REPORT_SUBMIT",report,request=request); return report
 def calculate_report_overdue_status(report): return report.is_overdue
+
