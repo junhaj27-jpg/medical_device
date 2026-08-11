@@ -49,11 +49,11 @@ def test_staff_report_denied(data): admin,ra,staff,e=data; pytest.raises(Permiss
 def test_approval_admin_only(data): admin,ra,staff,e=data; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); pytest.raises(PermissionDenied,approve_report,r,ra)
 def test_draft_cannot_be_approved(data): admin,ra,staff,e=data; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); pytest.raises(ValidationError,approve_report,r,admin)
 def test_submit_before_approval(data): admin,ra,staff,e=data; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); pytest.raises(ValidationError,mark_report_submitted,r,ra)
-def test_submit_records_user(data): admin,ra,staff,e=data; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); request_report_review(r,ra); approve_report(r,admin,password="Pass1234!",reason="검토 완료"); mark_report_submitted(r,ra); assert r.submitted_by==ra and r.submitted_at
-def test_submitted_cannot_return_to_review(data): admin,ra,staff,e=data; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); request_report_review(r,ra); approve_report(r,admin,password="Pass1234!",reason="검토 완료"); mark_report_submitted(r,ra); pytest.raises(ValidationError,request_report_review,r,ra)
+def test_submit_records_user(data,tmp_path,settings): admin,ra,staff,e=data; settings.MEDIA_ROOT=tmp_path; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); request_report_review(r,ra); generate_docx_report(r,ra); approve_report(r,admin,password="Pass1234!",reason="검토 완료"); mark_report_submitted(r,ra); assert r.submitted_by==ra and r.submitted_at
+def test_submitted_cannot_return_to_review(data,tmp_path,settings): admin,ra,staff,e=data; settings.MEDIA_ROOT=tmp_path; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); request_report_review(r,ra); generate_docx_report(r,ra); approve_report(r,admin,password="Pass1234!",reason="검토 완료"); mark_report_submitted(r,ra); pytest.raises(ValidationError,request_report_review,r,ra)
 def test_rejected_cannot_be_submitted(data): admin,ra,staff,e=data; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); r.report_status="REJECTED"; r.save(); pytest.raises(ValidationError,mark_report_submitted,r,ra)
 def test_report_overdue(data): admin,ra,staff,e=data; r=create_report_from_event(e,ra,regulatory_authority="MFDS",submission_due_date=timezone.localdate()-timedelta(days=1)); assert r.is_overdue
-def test_docx_version_and_filename(data,tmp_path,settings): admin,ra,staff,e=data; settings.MEDIA_ROOT=tmp_path; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); request_report_review(r,ra); approve_report(r,admin,password="Pass1234!",reason="검토 완료"); p=generate_docx_report(r,ra); assert p.name.endswith("_v1.docx") and r.document_version==1 and p.exists()
+def test_docx_version_and_filename(data,tmp_path,settings): admin,ra,staff,e=data; settings.MEDIA_ROOT=tmp_path; r=create_report_from_event(e,ra,regulatory_authority="MFDS"); request_report_review(r,ra); p=generate_docx_report(r,ra); approve_report(r,admin,password="Pass1234!",reason="검토 완료"); assert p.name.endswith("_v1.docx") and r.document_version==1 and p.exists()
 
 def test_capa_allowed_status_flow(data):
     admin,ra,staff,e=data; add_investigation(e,ra); kw=capa_kwargs(e,ra); kw.update(completion_percentage=100,actual_completion_date=timezone.localdate(),effectiveness_review="OK",effectiveness_result="EFFECTIVE")
@@ -70,3 +70,4 @@ def test_capa_blocks_skips_and_reverse_transitions(data):
 def test_staff_url_denied(client,data,name): admin,ra,staff,e=data; client.force_login(staff); assert client.get(reverse(name)).status_code==403
 @pytest.mark.parametrize("name",["capa:list","reports:list"])
 def test_list_login_required(client,name): assert client.get(reverse(name)).status_code==302
+
