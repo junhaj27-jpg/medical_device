@@ -61,6 +61,14 @@ def test_large_file():
 def test_audit_created(event,users): transition_event(event,"UNDER_REVIEW",users["RA_QA"]); assert AuditLog.objects.filter(object_id=str(event.pk)).exists()
 def test_api_auth(client): assert client.get("/api/events/").status_code in (401,403)
 def test_api_staff_scope(client,event,users): client.force_login(users["STAFF"]); assert client.get("/api/events/").json()[0]["id"]==event.id
+def test_api_cannot_bypass_event_workflow(client,event,users):
+    client.force_login(users["RA_QA"])
+    response=client.patch(f"/api/events/{event.pk}/",{"status":"CLOSED","reportability":"REPORTABLE","due_date":"2030-01-01"},content_type="application/json")
+    assert response.status_code==200
+    event.refresh_from_db()
+    assert event.status=="RECEIVED" and event.reportability=="UNDETERMINED"
+    assert event.due_date!=timezone.datetime(2030,1,1).date()
 def test_csv(client,event,users): client.force_login(users["RA_QA"]); assert client.get(reverse("event_list")+"?format=csv").status_code==200
 def test_docx(event,users,tmp_path,settings):
-    settings.MEDIA_ROOT=tmp_path; r=create_report_from_event(event,users["RA_QA"],regulatory_authority="내부",report_type="INTERNAL"); request_report_review(r,users["RA_QA"]); approve_report(r,users["ADMIN"],password="Pass1234!",reason="검토 완료"); p=generate_docx_report(r,users["RA_QA"]); assert p.exists() and p.suffix==".docx"
+    settings.MEDIA_ROOT=tmp_path; r=create_report_from_event(event,users["RA_QA"],regulatory_authority="내부",report_type="INTERNAL"); request_report_review(r,users["RA_QA"]); p=generate_docx_report(r,users["RA_QA"]); approve_report(r,users["ADMIN"],password="Pass1234!",reason="검토 완료"); assert p.exists() and p.suffix==".docx"
+
