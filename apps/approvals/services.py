@@ -36,8 +36,15 @@ def _json(data): return json.dumps(data,sort_keys=True,separators=(",",":"),ensu
 def _hmac(data): return hmac.new(_key(),_json(data),hashlib.sha256).hexdigest()
 
 
+def _lock_target(target):
+    locked=target.__class__.objects.select_for_update().get(pk=target.pk)
+    target.__dict__.update(locked.__dict__)
+    return target
+
+
 @transaction.atomic
 def sign_approval(*,target,user,password,meaning,reason,request=None,allowed_roles=("ADMIN",),forbid_self_user_id=None):
+    target=_lock_target(target)
     if user.role not in allowed_roles: raise PermissionDenied("이 승인 단계에 대한 권한이 없습니다.")
     if forbid_self_user_id and user.pk==forbid_self_user_id: raise PermissionDenied("작성자는 자신의 기록을 승인할 수 없습니다.")
     if not password or not user.check_password(password): raise ValidationError("승인자 재인증에 실패했습니다.")
@@ -74,12 +81,14 @@ def revoke_active_signatures(target, *, user, reason, request=None):
 
 @transaction.atomic
 def approve_capa(capa, *, user, password, reason, request=None):
+    capa=_lock_target(capa)
     if capa.approval_status!="REVIEW_PENDING": raise ValidationError("검토 대기 CAPA만 승인할 수 있습니다.")
     signature=sign_approval(target=capa,user=user,password=password,meaning="CAPA 승인",reason=reason,request=request,forbid_self_user_id=capa.created_by_id); capa.approval_status="APPROVED"; capa.save(update_fields=["approval_status","updated_at"]); record_audit(user=user,action="CAPA_APPROVE",target=capa,reason=reason,request=request,require_reason=True); return signature
 
 
 @transaction.atomic
 def approve_investigation(investigation, *, user, password, reason, request=None):
+    investigation=_lock_target(investigation)
     if investigation.approval_status!="REVIEW_PENDING": raise ValidationError("검토 대기 조사만 승인할 수 있습니다.")
     signature=sign_approval(target=investigation,user=user,password=password,meaning="조사 결과 승인",reason=reason,request=request,forbid_self_user_id=investigation.investigator_id)
     investigation.approval_status="APPROVED"; investigation.save(update_fields=["approval_status","updated_at"]); record_audit(user=user,action="INVESTIGATION_APPROVE",target=investigation,reason=reason,request=request,require_reason=True)
@@ -93,6 +102,8 @@ def request_signature_review(target,*,user,request=None):
 
 @transaction.atomic
 def reject_signature_target(target,*,user,password,reason,request=None):
+    target=_lock_target(target)
     if target.approval_status!="REVIEW_PENDING": raise ValidationError("검토 대기 기록만 반려할 수 있습니다.")
     creator_id=target.created_by_id if target.__class__.__name__=="CAPA" else target.investigator_id
     signature=sign_approval(target=target,user=user,password=password,meaning=f"{target.__class__.__name__} 반려",reason=reason,request=request,forbid_self_user_id=creator_id); target.approval_status="REJECTED"; target.save(update_fields=["approval_status","updated_at"]); record_audit(user=user,action=f"{target.__class__.__name__.upper()}_REJECT",target=target,reason=reason,request=request,require_reason=True); return signature
+
